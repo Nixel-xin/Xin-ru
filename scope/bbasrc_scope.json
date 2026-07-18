@@ -1,0 +1,101 @@
+{
+  "name": "BBASRC",
+  "vendor": "华晨宝马",
+  "rating_standard": "BBASRC漏洞等级评级标准V1.1",
+  "rating_standard_date": "2024-02-03",
+  "updated_at": "2026-07-16",
+  "in_scope": {
+    "wildcard_roots": [
+      "bmw-brilliance.cn",
+      "bba-app.biz",
+      "lingyue-digital.com",
+      "bmw.com.cn",
+      "bmwcn.cloud"
+    ],
+    "exact_hosts": [
+      "www.bmw-afc.com.cn",
+      "www.heraldleasing.com",
+      "www.bmw-leasing.com.cn",
+      "whispers.bmw.com.cn",
+      "myprofile.bmw.com.cn",
+      "v-api.countly.bmw.com.cn",
+      "api.countly.bmw.com.cn"
+    ],
+    "seed_targets": [
+      "https://www.bmw.com.cn",
+      "https://myprofile.bmw.com.cn",
+      "https://whispers.bmw.com.cn",
+      "https://v-api.countly.bmw.com.cn",
+      "https://api.countly.bmw.com.cn",
+      "https://www.bmw-afc.com.cn",
+      "https://www.heraldleasing.com",
+      "https://www.bmw-leasing.com.cn"
+    ]
+  },
+  "out_of_scope": {
+    "exact_urls": [
+      "https://motorrad-activity.ali.bmwcn.cloud"
+    ],
+    "host_suffixes": [
+      "motorrad-activity.ali.bmwcn.cloud"
+    ],
+    "keyword_exclusions": [
+      "tupu360",
+      "tupu-360",
+      "tupu_360"
+    ],
+    "notes": [
+      "暂不接收 motorrad-activity.ali.bmwcn.cloud 相关漏洞",
+      "目前不收 Tupu360 接口相关漏洞",
+      "非华晨宝马业务漏洞不收"
+    ]
+  },
+  "no_impact_examples": [
+    "无关安全的bug",
+    "无实际意义的扫描器报告",
+    "Self-XSS",
+    "无敏感信息的JSON Hijacking",
+    "无敏感操作的CSRF",
+    "无意义源码泄漏",
+    "内网IP/域名泄漏",
+    "401基础认证钓鱼",
+    "无敏感信息的logcat泄漏"
+  ],
+  "severity_rubric": {
+    "critical": [
+      "直接获取系统权限（服务器/重要业务客户端如MyBMW）",
+      "支付系统相关可造成大量损失",
+      "大量车主关联敏感信息获取或修改（至少两项可关联）",
+      "直接影响车辆安全（远程解锁/越权控车或充电桩）",
+      "可直接影响车辆生产（停产/改工控参数）"
+    ],
+    "high": [
+      "重要业务系统越权敏感操作",
+      "弱口令/认证绕过进入后台且有实际权限或敏感信息",
+      "高风险信息泄露（可利用敏感数据/批量部分车主信息/生产数据）",
+      "敏感信息越权访问、回显型SSRF获取内网敏感信息",
+      "普通SQL注入可取数但不含或少量敏感信息"
+    ],
+    "medium": [
+      "普通信息泄漏（路径遍历等）",
+      "无需交互危害用户（存储型XSS、缺CSRF token等）",
+      "普通越权（非核心系统订单/记录）",
+      "普通逻辑/流程缺陷",
+      "移动客户端敏感信息泄露（不含Android系统漏洞）"
+    ],
+    "low": [
+      "难利用但有隐患的存储型XSS/非重要CSRF",
+      "SSRF内网无回显或部分回显且未获敏感信息/权限",
+      "移动客户端本地拒绝服务"
+    ]
+  },
+  "vendor_protection": {
+    "same_system_same_type_burst": "同一系统短时间大量同类型高危时，可能仅正常审核前3个，其余降级并暂停收取该类型"
+  },
+  "agent_policy": {
+    "filter_leads_by_scope": true,
+    "skip_out_of_scope_verification": true,
+    "prefer_dual_accounts_for_authz": true,
+    "max_similar_high_findings_per_system": 3
+  }
+}

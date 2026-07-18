@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install *)",
+      "Bash(pip3 install *)",
+      "Bash(kill %1)",
+      "Bash(docker --version)",
+      "Bash(agent-compose --help)",
+      "Skill(claude-api)",
+      "Bash(curl -vI https://www.bmw-afc.com.cn/)",
+      "Bash(nslookup www.bmw-afc.com.cn)"
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  xinru-agent:
+    build: .
+    image: xinru-agent:exam
+    container_name: xinru-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - EXAM_MODE=1
+      - XINRU_UNATTENDED=1
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_MODEL=${LLM_MODEL:-grok-4.5}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://www.fastaitoken.com/v1}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-120}
+      - LLM_USER_AGENT=${LLM_USER_AGENT:-Mozilla/5.0}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}
+      - YAKIT_MCP_URL=${YAKIT_MCP_URL:-}
+      - DATABASE_PATH=/app/data/xinru.db
+      - DATA_DIR=/app/data
+      - REPORTS_DIR=/app/reports
+      - XINRU_WORKERS=${XINRU_WORKERS:-2}
+      - XINRU_LLM_MAX_RETRIES=${XINRU_LLM_MAX_RETRIES:-5}
+      - WOOYUN_SKILL_DIR=${WOOYUN_SKILL_DIR:-}
+    volumes:
+      - ./reports:/app/reports
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

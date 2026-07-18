@@ -1,0 +1,31 @@
+{
+  "brief": "BBASRC 华晨宝马授权测试（匿名优先模式）。当前仅测可达且无需登录目标：www.bmw.com.cn、v-api.countly.bmw.com.cn、api.countly.bmw.com.cn；登录相关资产暂不可达/无账号，跳过越权双账号验证。排除 motorrad-activity.ali.bmwcn.cloud 与 Tupu360。按 xinru 无人值守：收集→（无认证继续）→审计→验证→报告。评级 BBASRC V1.1。",
+  "scope_file": "scope/bbasrc_scope.json",
+  "kickoff_file": "scope/bbasrc_kickoff.md",
+  "default_targets": [
+    "https://www.bmw.com.cn",
+    "https://myprofile.bmw.com.cn",
+    "https://whispers.bmw.com.cn",
+    "https://v-api.countly.bmw.com.cn",
+    "https://api.countly.bmw.com.cn",
+    "https://www.bmw-afc.com.cn",
+    "https://www.heraldleasing.com",
+    "https://www.bmw-leasing.com.cn"
+  ],
+  "require_dual_accounts": true,
+  "unattended": true,
+  "anonymous_targets": [
+    "https://www.bmw.com.cn",
+    "https://v-api.countly.bmw.com.cn",
+    "https://api.countly.bmw.com.cn"
+  ],
+  "auth_required_targets_deferred": [
+    "https://myprofile.bmw.com.cn",
+    "https://secure.bmw.com.cn",
+    "https://whispers.bmw.com.cn",
+    "https://www.bmw-afc.com.cn",
+    "https://www.bmw-leasing.com.cn",
+    "https://www.heraldleasing.com"
+  ],
+  "mode": "anonymous_first"
+}
