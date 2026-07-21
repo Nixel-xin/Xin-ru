@@ -576,14 +576,27 @@ async def audit_one_file(
             )
         except Exception as e:
             check = {
-                "verdict": "uncertain",
+                "verdict": "excluded",
                 "severity": hit.get("severity_guess") or "medium",
                 "reason": f"自检异常: {e}",
                 "attack_impact": "",
                 "fix_suggestion": "",
             }
 
-        verdict = (check or {}).get("verdict") or "uncertain"
+        # 铁律：验证后必须收敛为 confirmed(有)/excluded(没有)
+        try:
+            from auditor.self_check import finalize_verdict
+            check = finalize_verdict(check or {}, verify_results=evidence, threat=hit)
+        except Exception:
+            v0 = str((check or {}).get("verdict") or "").lower()
+            if v0 not in {"confirmed", "excluded"}:
+                check = dict(check or {})
+                check["verdict"] = "excluded"
+                check["reason"] = (check.get("reason") or "") + " | finalized_fallback: excluded"
+
+        verdict = (check or {}).get("verdict") or "excluded"
+        if verdict not in {"confirmed", "excluded"}:
+            verdict = "excluded"
         severity = (check or {}).get("severity") or hit.get("severity_guess") or "medium"
         reason = (check or {}).get("reason") or (check or {}).get("attack_impact") or ""
         wy_ref = (check or {}).get("wooyun_reference") or ""
@@ -623,10 +636,10 @@ async def audit_one_file(
 
         if verdict == "confirmed":
             tracker.update_counts(confirmed=1)
-        elif verdict == "excluded":
-            tracker.update_counts(excluded=1)
         else:
-            tracker.update_counts(uncertain=1)
+            # 最终只有有/没有；excluded 与其它一律记 excluded
+            verdict = "excluded" if verdict != "confirmed" else verdict
+            tracker.update_counts(excluded=1)
 
         # 广播
         try:
@@ -637,7 +650,7 @@ async def audit_one_file(
         except Exception:
             pass
 
-        icon = "✅" if verdict == "confirmed" else ("⚠️" if verdict == "uncertain" else "❌")
+        icon = "✅" if verdict == "confirmed" else "❌"
         await log(
             task_id,
             f"[{worker_id}] {icon} {verdict} — {finding['name']} @ {base}:{threat_line} | {reason[:120]}",
@@ -743,7 +756,7 @@ def _upsert_finding(task_id: int, f: dict) -> bool:
             call_chain=call_chain,
             api_endpoint=api_endpoint,
             parameters=parameters,
-            verdict=f.get("verdict") or "uncertain",
+            verdict=(f.get("verdict") if f.get("verdict") in {"confirmed", "excluded"} else "excluded"),
             yakit_evidence=yakit_evidence,
             attack_impact=f.get("attack_impact") or "",
             fix_suggestion=f.get("fix_suggestion") or "",
@@ -1004,7 +1017,9 @@ async def run_multi_agent_audit(
                             int(Task.get_by_id(task_id).total_lines_audited or 0),
                             counters["lines_total"],
                         ),
-                        total_findings=Finding.select().where(Finding.task_id == task_id).count(),
+                        total_findings=Finding.select().where(
+                            (Finding.task_id == task_id) & (Finding.verdict == "confirmed")
+                        ).count(),
                         updated_at=datetime.now(),
                     ).where(Task.id == task_id).execute()
                 except Exception:

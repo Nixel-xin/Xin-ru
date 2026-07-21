@@ -120,7 +120,7 @@ class Finding(BaseModel):
     call_chain = TextField()  # JSON: 调用链
     api_endpoint = TextField()  # JSON: 接口信息
     parameters = TextField()  # JSON: 参数
-    verdict = CharField(max_length=32)  # confirmed / excluded / uncertain
+    verdict = CharField(max_length=32)  # confirmed(有) / excluded(没有)；uncertain 仅兼容历史数据
     yakit_evidence = TextField()  # JSON: Yakit 验证数据包列表
     attack_impact = TextField()
     fix_suggestion = TextField()

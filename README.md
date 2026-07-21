@@ -326,6 +326,21 @@ python3 cli.py --base http://127.0.0.1:8000 health
 | GET | `/api/tasks/{id}/workitems` | WorkItem 明细 |
 | WS | `/ws/{id}` | 实时进度 |
 
+## 验证铁律（有 / 没有）
+
+验证工具不限：Yakit / httpx / curl / bash 发包均可。
+
+但每个威胁在验证后必须收敛为：
+
+| verdict | 含义 | 是否计入正式漏洞 |
+|---------|------|------------------|
+| `confirmed` | **有漏洞**（验证出现可利用业务证据） | 是 |
+| `excluded` | **无漏洞**（验证失败、证据不足、静态资源、鉴权生效等） | 否 |
+
+- 禁止以 `uncertain` 作为最终漏洞结果
+- `total_findings` / 报告“确认漏洞数”只统计 `confirmed`
+- 硬编码密钥等线索：若验证未证明可利用影响 → `excluded`（可保留说明，不记正式漏洞）
+
 ## 无人值守行为
 
 | 场景 | 行为 |

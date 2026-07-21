@@ -125,17 +125,19 @@ def _build_html(task, targets, config, findings, confirmed, suspected, excluded,
     <tr><td>完成时间</td><td>{task.completed_at.strftime('%Y-%m-%d %H:%M:%S') if task.completed_at else '—'}</td></tr>
     <tr><td>收集文件数</td><td>{task.total_files_collected}</td></tr>
     <tr><td>审计行数</td><td>{task.total_lines_audited}</td></tr>
-    <tr><td>发现漏洞数</td><td>{task.total_findings}</td></tr>
+    <tr><td>确认漏洞数(仅 verified)</td><td>{len(confirmed)}</td></tr>
+    <tr><td>排除数</td><td>{len(excluded)}</td></tr>
     <tr><td>认证方式</td><td>{'有凭证' if config.get('credentials') or config.get('cookies') else '无认证模式'}</td></tr>
     <tr><td>报告生成时间</td><td>{now}</td></tr>
   </table>
 </div>
 
 <h2>📊 漏洞概览</h2>
+<p style="color:#555;font-size:13px;">铁律：发包验证后只保留 <b>有漏洞(confirmed)</b> / <b>无漏洞(excluded)</b>。验证工具可以是 Yakit/httpx/curl，但必须收敛为确认结果。正式漏洞数仅统计 confirmed。</p>
 <div class="summary">
-  <div class="summary-card"><div class="num" style="color:#e94560;">{len(confirmed)}</div><div class="label">✅ 已确认</div></div>
-  <div class="summary-card"><div class="num" style="color:#ffa502;">{len(suspected)}</div><div class="label">⚠️ 待验证</div></div>
-  <div class="summary-card"><div class="num" style="color:#999;">{len(excluded)}</div><div class="label">❌ 已排除</div></div>
+  <div class="summary-card"><div class="num" style="color:#e94560;">{len(confirmed)}</div><div class="label">✅ 有漏洞(已验证)</div></div>
+  <div class="summary-card"><div class="num" style="color:#999;">{len(excluded)}</div><div class="label">❌ 无漏洞(已排除)</div></div>
+  <div class="summary-card"><div class="num" style="color:#666;">{len(suspected)}</div><div class="label">归档中间态(应为空)</div></div>
   <div class="summary-card"><div class="num">{len(files)}</div><div class="label">📁 收集文件</div></div>
   <div class="summary-card"><div class="num">{task.total_lines_audited}</div><div class="label">🔍 审计行数</div></div>
 </div>
@@ -180,7 +182,7 @@ def _findings_table(findings) -> str:
     rows = []
     for f in findings:
         sev_badge = f'<span class="badge badge-{f.severity}">{_SEV_LABEL(f.severity)}</span>'
-        verdict_label = {"confirmed": "✅ 已确认", "excluded": "❌ 已排除", "uncertain": "⚠️ 待验证"}.get(f.verdict, f.verdict)
+        verdict_label = {"confirmed": "✅ 有漏洞", "excluded": "❌ 无漏洞", "uncertain": "❌ 无漏洞(历史中间态)"}.get(f.verdict, f.verdict)
         verdict_badge = f'<span class="badge badge-{f.verdict}">{verdict_label}</span>'
         rows.append(f"<tr><td>{f.finding_number}</td><td>{sev_badge}</td><td><a href='#finding-{f.finding_number}'>{_escape(f.name)}</a></td><td style='font-size:11px;'>{_escape(f.file_path)}:{f.line_number}</td><td>{verdict_badge}</td></tr>")
     return "\n".join(rows)

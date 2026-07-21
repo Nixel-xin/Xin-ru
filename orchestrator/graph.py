@@ -1077,7 +1077,12 @@ async def node_generate_report(state: AgentState) -> AgentState:
     task.status = "completed"
     task.phase = "done"
     task.pause_reason = None
-    task.total_findings = len(state.get("findings", []))
+    task.total_findings = sum(1 for f in (state.get("findings") or []) if (f.get("verdict") if isinstance(f, dict) else getattr(f, "verdict", None)) == "confirmed")
+    try:
+        from storage.models import Finding as _Finding
+        task.total_findings = _Finding.select().where((_Finding.task_id == task_id) & (_Finding.verdict == "confirmed")).count()
+    except Exception:
+        pass
     task.total_lines_audited = state.get("total_lines_audited", 0)
     task.completed_at = datetime.now()
     task.save()

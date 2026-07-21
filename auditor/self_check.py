@@ -24,6 +24,92 @@ def _status_from_finding(text: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+
+def evidence_has_exploit_signal(verify_results: list[dict] | None) -> tuple[bool, str]:
+    """验证证据是否足以确认“有漏洞”。
+
+    工具不限（Yakit/httpx/curl 均可），关键是出现可利用业务信号。
+    """
+    verify_results = verify_results or []
+    if not verify_results:
+        return False, "无验证数据"
+
+    def _is_business_open(v: dict) -> bool:
+        cls = v.get("class") if isinstance(v.get("class"), dict) else None
+        if cls is not None:
+            return bool(cls.get("business_open"))
+        finding = str(v.get("finding", ""))
+        return ("业务数据可达" in finding) or ("⚠️" in finding and "静态" not in finding)
+
+    signals = []
+    for v in verify_results:
+        step = str(v.get("step", ""))
+        finding = str(v.get("finding", ""))
+        if "请求失败" in finding or "验证异常" in finding:
+            continue
+        if "静态资源" in finding:
+            continue
+        if _is_business_open(v):
+            signals.append(f"{step}:{finding}")
+            continue
+        if "注入" in step and ("⚠️" in finding or "异常" in finding):
+            signals.append(f"{step}:{finding}")
+            continue
+        if ("越权" in step or "交叉" in step or "B对象" in step) and ("⚠️" in finding or _is_business_open(v)):
+            signals.append(f"{step}:{finding}")
+    if signals:
+        return True, "；".join(signals[:6])
+    return False, "验证未出现可利用业务信号"
+
+
+def finalize_verdict(
+    result: dict[str, Any] | None,
+    *,
+    verify_results: list[dict] | None = None,
+    threat: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """铁律：验证后最终只能是 confirmed(有) / excluded(没有)。
+
+    - 有可利用验证信号 → confirmed
+    - 否则 → excluded
+    - uncertain / 其他值一律收敛
+    """
+    result = dict(result or {})
+    verify_results = verify_results or []
+    threat = threat or {}
+    verdict = str(result.get("verdict") or "").strip().lower()
+    has_exploit, exploit_reason = evidence_has_exploit_signal(verify_results)
+
+    # 静态资源等已 excluded 保持
+    if verdict == "excluded" and not has_exploit:
+        result["verdict"] = "excluded"
+        result.setdefault("reason", "已排除")
+        return result
+
+    if has_exploit:
+        result["verdict"] = "confirmed"
+        if verdict != "confirmed":
+            result["reason"] = (
+                (result.get("reason") or "") + f" | finalized: exploit_evidence ({exploit_reason})"
+            ).strip(" |")
+        return result
+
+    # 无利用证据：一律没有
+    result["verdict"] = "excluded"
+    if verdict in {"", "uncertain", "confirmed"}:
+        extra = "finalized: no exploit evidence after verification → excluded"
+        if not verify_results:
+            extra = "finalized: missing verification evidence → excluded"
+        result["reason"] = ((result.get("reason") or "") + " | " + extra).strip(" |")
+        # 硬编码密钥但打不穿接口：降为信息级排除，不当正式漏洞
+        pname = str(threat.get("pattern_name") or threat.get("pattern") or "")
+        if "硬编码" in pname or str(threat.get("pattern") or "").startswith("A1"):
+            result["severity"] = "info"
+            result["attack_impact"] = result.get("attack_impact") or "发现硬编码线索，但验证未证明可利用影响"
+            result["fix_suggestion"] = result.get("fix_suggestion") or "轮换并移除前端密钥；当前未验证到可利用链路"
+    return result
+
+
 def rule_based_self_check(
     *,
     threat: dict[str, Any],
@@ -86,7 +172,7 @@ def rule_based_self_check(
     pattern = str(threat.get("pattern") or "")
     pattern_name = str(threat.get("pattern_name") or "未知威胁")
 
-    # 硬编码密钥：即使暂时打不了接口，也至少 uncertain/high
+    # 硬编码密钥：仅当验证证明可利用才 confirmed；否则 excluded
     if pattern.startswith("A1") or "硬编码" in pattern_name:
         if no_auth_open or param_weak:
             return {
@@ -104,27 +190,27 @@ def rule_based_self_check(
                 },
             }
         return {
-            "verdict": "uncertain" if not verify_results else "confirmed",
-            "severity": "high",
-            "attack_impact": "前端暴露密钥/token，攻击者可读源码直接获取",
-            "fix_suggestion": "删除硬编码凭据，使用后端下发短时凭证",
-            "reason": "硬编码凭据本身即高价值威胁，接口验证不足时仍保留",
+            "verdict": "excluded",
+            "severity": "info",
+            "attack_impact": "前端暴露密钥/token 线索，但验证未证明可利用影响",
+            "fix_suggestion": "移除前端硬编码密钥并轮换；未形成可利用链路前不记正式漏洞",
+            "reason": "硬编码线索存在，但无接口利用验证成功",
             "answers": {
                 "auth_carrier": "硬编码凭据",
-                "attacker_can_satisfy": True,
+                "attacker_can_satisfy": False,
                 "no_skipped_steps": bool(verify_results),
-                "simpler_explanation": "可能是示例值/假值",
-                "chainable": True,
+                "simpler_explanation": "密钥暴露线索，未验证利用",
+                "chainable": False,
             },
         }
 
     if not locatable:
         return {
-            "verdict": "uncertain",
+            "verdict": "excluded",
             "severity": threat.get("severity_guess") or "low",
-            "attack_impact": "尚未定位到可复现接口",
-            "fix_suggestion": "补充接口定位后再验证",
-            "reason": "endpoint 未定位",
+            "attack_impact": "尚未定位到可复现接口，无法确认漏洞",
+            "fix_suggestion": "补充接口定位后再验证；当前不记正式漏洞",
+            "reason": "endpoint 未定位，验证无法完成",
             "answers": {
                 "auth_carrier": "未知",
                 "attacker_can_satisfy": False,
@@ -136,11 +222,11 @@ def rule_based_self_check(
 
     if all_fail:
         return {
-            "verdict": "uncertain",
+            "verdict": "excluded",
             "severity": threat.get("severity_guess") or "low",
             "attack_impact": "验证请求失败，无法确认可利用性",
-            "fix_suggestion": "检查网络/域名/证书后重测",
-            "reason": "全部验证请求失败",
+            "fix_suggestion": "检查网络/域名/证书后重测；当前不记正式漏洞",
+            "reason": "全部验证请求失败，按无漏洞收敛",
             "answers": {
                 "auth_carrier": "未知",
                 "attacker_can_satisfy": False,
@@ -184,11 +270,11 @@ def rule_based_self_check(
         }
 
     return {
-        "verdict": "uncertain",
+        "verdict": "excluded",
         "severity": threat.get("severity_guess") or "low",
-        "attack_impact": "存在可疑代码，但现有证据不足以确认漏洞",
-        "fix_suggestion": "结合业务上下文补充验证",
-        "reason": "证据不足",
+        "attack_impact": "存在可疑代码，但验证未证明可利用",
+        "fix_suggestion": "保持现有防护；若业务敏感可补充鉴权与参数校验",
+        "reason": "证据不足，验证未确认漏洞",
         "answers": {
             "auth_carrier": "未知/混合",
             "attacker_can_satisfy": False,
@@ -244,7 +330,7 @@ async def run_self_check(
         endpoint=endpoint,
     )
     if not call_llm_json:
-        return _with_wooyun(base, threat, endpoint, verify_results)
+        return _with_wooyun(finalize_verdict(base, verify_results=verify_results, threat=threat), threat, endpoint, verify_results)
 
     try:
         # 乌云对照上下文注入
@@ -270,16 +356,19 @@ async def run_self_check(
             timeout=90,
         )
         if not isinstance(result, dict):
-            return _with_wooyun(base, threat, endpoint, verify_results)
+            return _with_wooyun(finalize_verdict(base, verify_results=verify_results, threat=threat), threat, endpoint, verify_results)
         # 防止 LLM 在证据很弱时胡乱 confirmed：规则是 excluded 时不被 LLM 抬到 confirmed
         if base.get("verdict") == "excluded" and result.get("verdict") == "confirmed":
-            result["verdict"] = "uncertain"
+            # 规则已排除时，不允许 LLM 直接抬升；最终仍走 finalize 用验证证据裁决
+            result["verdict"] = "excluded"
             result["reason"] = (result.get("reason") or "") + " | overridden: rule excluded"
         result.setdefault("severity", base.get("severity"))
         result.setdefault("attack_impact", base.get("attack_impact"))
         result.setdefault("fix_suggestion", base.get("fix_suggestion"))
         result.setdefault("answers", base.get("answers"))
+        result = finalize_verdict(result, verify_results=verify_results, threat=threat)
         return _with_wooyun(result, threat, endpoint, verify_results)
     except Exception as e:
         base["reason"] = f"{base.get('reason', '')} | llm_failed: {e}"
+        base = finalize_verdict(base, verify_results=verify_results, threat=threat)
         return _with_wooyun(base, threat, endpoint, verify_results)
