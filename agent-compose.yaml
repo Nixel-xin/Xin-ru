@@ -6,7 +6,7 @@ services:
     image: xinru-agent:exam
     container_name: xinru-agent
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - EXAM_MODE=1
       - XINRU_UNATTENDED=1

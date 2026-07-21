@@ -4,6 +4,17 @@ BASE_URL="${XINRU_BASE_URL:-http://127.0.0.1:8000}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+
+echo "== 0) agent-compose runtime =="
+if command -v agent-compose >/dev/null 2>&1; then
+  agent-compose -f agent-compose.yaml ps || sudo agent-compose -f agent-compose.yaml ps
+else
+  echo "WARN: agent-compose not in PATH (ok if platform injects it)"
+fi
+if command -v docker >/dev/null 2>&1; then
+  docker ps --filter name=xinru-agent --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' || true
+fi
+
 echo "== 1) healthz =="
 curl -fsS "$BASE_URL/healthz" | tee /tmp/xinru_health.json
 python3 - <<'PY'
@@ -43,12 +54,19 @@ echo "== 4) logs tail =="
 curl -fsS "$BASE_URL/api/tasks/$TASK_ID/logs?limit=20" | python3 -c 'import sys,json;logs=json.load(sys.stdin);print("logs",len(logs));
 [print(x.get("log_type"), (x.get("message") or "")[:120]) for x in logs[-5:]]'
 
-echo "== 5) CLI health =="
+echo "== 5) CLI health (host + agent-compose container) =="
 if [[ -x "$ROOT/venv/bin/python" ]]; then
   PY="$ROOT/venv/bin/python"
 else
   PY="python3"
 fi
-"$PY" "$ROOT/cli.py" --base "$BASE_URL" health
+"$PY" "$ROOT/cli.py" --base "$BASE_URL" health || true
+if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -qx xinru-agent; then
+  echo "-- container cli --"
+  docker exec -e XINRU_BASE_URL="$BASE_URL" xinru-agent python /app/cli.py --base "$BASE_URL" health
+  echo "-- scripts/agent_cli.sh --"
+  "$ROOT/scripts/agent_cli.sh" health
+fi
 echo "VERIFY_BASIC_OK task_id=$TASK_ID"
 echo "Full loop: $PY cli.py --base $BASE_URL run --target <url> --wait --timeout 1800"
+echo "Or: ./scripts/agent_cli.sh run --target <url> --wait --timeout 1800"

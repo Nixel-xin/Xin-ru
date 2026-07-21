@@ -17,15 +17,74 @@ import os
 import sys
 import time
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode, urljoin
+from urllib.request import Request, urlopen
 
-import httpx
+try:
+    import httpx  # type: ignore
+except Exception:  # pragma: no cover
+    httpx = None
 
 DEFAULT_BASE = os.environ.get("XINRU_BASE_URL", "http://127.0.0.1:8000")
 
 
-def _client(timeout: float = 30.0) -> httpx.Client:
-    return httpx.Client(timeout=timeout, follow_redirects=True)
+class _Resp:
+    def __init__(self, status_code: int, content: bytes, headers=None):
+        self.status_code = status_code
+        self.content = content or b""
+        self.headers = headers or {}
+        self.text = self.content.decode("utf-8", "replace")
+
+    def json(self):
+        return json.loads(self.text or "null")
+
+
+class _UrllibClient:
+    def __init__(self, timeout: float = 30.0):
+        self.timeout = timeout
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def request(self, method: str, url: str, *, data=None, params=None, files=None):
+        if params:
+            url = url + ("&" if "?" in url else "?") + urlencode(params)
+        headers = {}
+        body = None
+        if files is not None:
+            raise RuntimeError("multipart upload requires httpx; use curl or container cli")
+        if data is not None:
+            if isinstance(data, (dict, list)):
+                body = urlencode(data).encode()
+                headers["Content-Type"] = "application/x-www-form-urlencoded"
+            elif isinstance(data, (bytes, bytearray)):
+                body = data
+            else:
+                body = str(data).encode()
+        req = Request(url, data=body, headers=headers, method=method.upper())
+        try:
+            with urlopen(req, timeout=self.timeout) as r:
+                return _Resp(getattr(r, "status", 200), r.read(), dict(r.headers))
+        except HTTPError as e:
+            return _Resp(e.code, e.read() if hasattr(e, "read") else b"", dict(getattr(e, "headers", {}) or {}))
+        except URLError as e:
+            raise ConnectionError(str(e)) from e
+
+    def get(self, url, **kwargs):
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url, **kwargs):
+        return self.request("POST", url, **kwargs)
+
+
+def _client(timeout: float = 30.0):
+    if httpx is not None:
+        return httpx.Client(timeout=timeout, follow_redirects=True)
+    return _UrllibClient(timeout=timeout)
 
 
 def cmd_health(args) -> int:

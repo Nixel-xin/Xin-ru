@@ -149,6 +149,79 @@ agent/
 ./venv/bin/python run_resume_task.py <task_id> --pause
 ```
 
+
+
+## 考试验收（必须自己跑）
+
+> 平台要求：Agent 必须在 **agent-compose** 上运行，且可被 CLI 正常调用。  
+> **不要只信 AI 文字**，按下面命令亲自验收，把输出截图/日志留下。
+
+### A. agent-compose 拉起
+
+```bash
+cp .env.example .env   # 填 LLM Key
+agent-compose -f agent-compose.yaml up -d --build
+agent-compose -f agent-compose.yaml ps
+# 期望: xinru-agent ... Up ... (healthy)
+```
+
+### B. 健康检查
+
+```bash
+curl -fsS http://127.0.0.1:8000/healthz
+# 期望包含: "ok": true, "exam_mode": true, "unattended": true
+```
+
+### C. CLI 调用（两种都行）
+
+```bash
+# 1) 宿主机 CLI（无 urllib 回退，无需 venv）
+python3 cli.py --base http://127.0.0.1:8000 health
+
+# 2) 经 agent-compose 容器调用（推荐，和运行环境一致）
+./scripts/agent_cli.sh health
+./scripts/agent_cli.sh run --target https://example.com --brief "exam demo"
+./scripts/agent_cli.sh wait --task-id <id> --timeout 1800
+./scripts/agent_cli.sh report --task-id <id> --out /tmp/xinru_report.html
+```
+
+### D. 一键自检脚本
+
+```bash
+./scripts/verify_exam.sh
+# 期望最后一行: VERIFY_BASIC_OK task_id=...
+```
+
+### E. 无人值守闭环抽检
+
+```bash
+./scripts/agent_cli.sh run --target https://example.com --brief "closed-loop" --wait --timeout 1800
+./scripts/agent_cli.sh status --task-id <id>
+# 期望 status=completed 且 report_ready=true（或至少进入 collecting/auditing 后无人工卡点）
+```
+
+### 本机已验证记录（部署机）
+
+在 `ubuntu@43.162.126.132:/home/ubuntu/Xin-ru` 实测过：
+
+```text
+agent-compose -f agent-compose.yaml ps
+# xinru-agent ... Up (healthy)  127.0.0.1:8000->8000/tcp
+
+curl -fsS http://127.0.0.1:8000/healthz
+# {"ok":true,"service":"xinru-agent","exam_mode":true,"unattended":true,...}
+
+docker exec xinru-agent python /app/cli.py --base http://127.0.0.1:8000 health
+# {"ok":true,...}
+```
+
+安全说明：生产/共享 VPS 上端口绑定为 `127.0.0.1:8000`，评估请用 SSH 隧道，勿公网裸奔。
+
+```bash
+ssh -L 8000:127.0.0.1:8000 ubuntu@<host>
+curl -fsS http://127.0.0.1:8000/healthz
+```
+
 ## 提交检查清单（考试）
 
 - [ ] GitLab FDE 仓库可访问（不含 `.env` / `*.db` / `venv`）
